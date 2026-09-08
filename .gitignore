@@ -1,0 +1,12 @@
+# Local compose overrides and secrets
+.env
+docker-compose.override.yml
+
+# Bind-mount targets
+/data/
+/src/
+
+# Build output
+build/
+
+.DS_Store

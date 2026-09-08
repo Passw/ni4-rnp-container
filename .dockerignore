@@ -1,0 +1,10 @@
+.git
+.gitignore
+.github
+*.md
+!README.md
+data/
+src/
+build/
+.env
+.DS_Store

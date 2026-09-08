@@ -1,0 +1,55 @@
+# Containers for RNP, the Ribose OpenPGP implementation.
+#
+#   docker compose run --rm rnp --version
+#   docker compose run --rm rnpkeys --list-keys
+#   docker compose run --rm dev
+
+x-build: &build
+  context: .
+  args:
+    RNP_VERSION: ${RNP_VERSION:-main}
+    CRYPTO_BACKEND: ${CRYPTO_BACKEND:-openssl}
+    BUILD_TYPE: ${BUILD_TYPE:-Release}
+
+services:
+  # Runtime image. Anything after the service name is passed to rnp.
+  rnp:
+    build:
+      <<: *build
+      target: runtime
+    image: rnp:${RNP_VERSION:-main}
+    volumes:
+      - keyring:/home/rnp/.rnp
+      - ./data:/data
+    working_dir: /data
+
+  # Same image, entering through rnpkeys instead of rnp.
+  rnpkeys:
+    build:
+      <<: *build
+      target: runtime
+    image: rnp:${RNP_VERSION:-main}
+    entrypoint: ["rnpkeys"]
+    command: ["--version"]
+    volumes:
+      - keyring:/home/rnp/.rnp
+      - ./data:/data
+    working_dir: /data
+
+  # Build environment with the toolchain and a shell. Mount your own
+  # checkout over /work to build and test a working tree.
+  dev:
+    build:
+      <<: *build
+      target: dev
+    image: rnp-dev:${RNP_VERSION:-main}
+    volumes:
+      - ./src:/work
+      - keyring:/root/.rnp
+    working_dir: /work
+    stdin_open: true
+    tty: true
+    command: ["/bin/bash"]
+
+volumes:
+  keyring:
