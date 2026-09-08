@@ -45,11 +45,15 @@ services:
     image: rnp-dev:${RNP_VERSION:-main}
     volumes:
       - ./src:/work
-      - keyring:/root/.rnp
+      - dev-keyring:/root/.rnp
     working_dir: /work
     stdin_open: true
     tty: true
     command: ["/bin/bash"]
 
 volumes:
+  # Keyring of the runtime image, owned by the unprivileged rnp user.
   keyring:
+  # The dev services runs as root, so it gets a keyring of its own rather than
+  # writing root-owned files into the one above.
+  dev-keyring:

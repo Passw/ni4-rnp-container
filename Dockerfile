@@ -89,7 +89,11 @@ COPY --from=builder /out/usr/local/ /usr/local/
 RUN ldconfig
 
 # Unprivileged user with a writable home for the OpenPGP keyring.
-RUN useradd --create-home --shell /bin/bash rnp
+# The keyring directory must exist and be owned by rnp in the image: Docker
+# copies its ownership onto a named volume mounted there, and a volume over a
+# missing directory would be created root-owned and unwritable.
+RUN useradd --create-home --shell /bin/bash rnp \
+    && install -d -o rnp -g rnp -m 700 /home/rnp/.rnp
 USER rnp
 WORKDIR /home/rnp
 

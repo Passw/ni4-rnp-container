@@ -6,11 +6,11 @@ implementation.
 The [Dockerfile](Dockerfile) builds RNP from source against Ubuntu 24.04 and
 produces three targets:
 
-| Target    | Contents                                                    |
-|-----------|-------------------------------------------------------------|
-| `builder` | Toolchain plus a full RNP build tree                         |
-| `dev`     | `builder` plus gdb, valgrind, gnupg and a shell              |
-| `runtime` | Slim image with `rnp`, `rnpkeys` and the shared library only |
+| Target    | Contents                                                     | Size    |
+|-----------|--------------------------------------------------------------|---------|
+| `builder` | Toolchain plus a full RNP build tree                         | ~1 GB   |
+| `dev`     | `builder` plus gdb, valgrind, gnupg and a shell              | ~1.1 GB |
+| `runtime` | Slim image with `rnp`, `rnpkeys` and the shared library only | ~157 MB |
 
 ## Usage
 
@@ -40,6 +40,13 @@ Open a shell in the build environment:
 docker compose run --rm dev
 ```
 
+The `dev` service has no entrypoint, so a one-off command needs the shell
+spelled out:
+
+```sh
+docker compose run --rm dev bash -c 'cmake --version'
+```
+
 The `dev` service mounts `./src` as `/work`. Clone a working tree there to
 build and test it inside the container.
 
@@ -50,17 +57,16 @@ crypto backend and the CMake build type. The same values can be passed
 directly to a plain `docker build`:
 
 ```sh
-docker build --target runtime \
-  --build-arg RNP_VERSION=v0.17.1 \
-  --build-arg CRYPTO_BACKEND=botan \
-  -t rnp:v0.17.1 .
+docker build --target runtime --build-arg RNP_VERSION=v0.17.1 -t rnp:v0.17.1 .
 ```
 
-Note that `CRYPTO_BACKEND=botan` needs Botan development packages added to the
-`builder` stage; only the OpenSSL backend builds out of the box.
+Only the OpenSSL backend builds out of the box. `CRYPTO_BACKEND=botan` also
+needs Botan development packages added to the `builder` stage.
 
 ## Volumes
 
-The keyring lives in a named volume mounted at `~/.rnp`, so keys generated in
-one run are still there in the next. Remove it with
+The `rnp` and `rnpkeys` services share a `keyring` volume mounted at
+`/home/rnp/.rnp`, so keys generated in one run are still there in the next.
+Because `dev` runs as root, it gets a separate `dev-keyring` volume rather than
+writing root-owned files into the first one. Remove both with
 `docker compose down --volumes`.
