@@ -10,7 +10,11 @@ produces three targets:
 |-----------|--------------------------------------------------------------|---------|
 | `builder` | Toolchain plus a full RNP build tree                         | ~1 GB   |
 | `dev`     | `builder` plus gdb, valgrind, gnupg and a shell              | ~1.1 GB |
-| `runtime` | Slim image with `rnp`, `rnpkeys` and the shared library only | ~157 MB |
+| `runtime` | Slim image with `rnp`, `rnpkeys` and the shared library only | ~174 MB |
+
+Compose defaults to the Botan 3 backend, which compiles Botan from source and
+makes the first build slow. For a fast build against system OpenSSL, put
+`CRYPTO_BACKEND=openssl` in `.env`.
 
 ## Usage
 
@@ -68,7 +72,11 @@ docker build --target runtime --build-arg RNP_VERSION=v0.17.1 -t rnp:v0.17.1 .
 |-----------|----------------------------------------------------|
 | `openssl` | System OpenSSL. Nothing extra is compiled.          |
 | `botan`   | Botan, with RNP accepting either major version.     |
-| `botan3`  | Botan, with RNP requiring version 3.                |
+| `botan3`  | Botan, with RNP requiring version 3. Compose default. |
+
+The backend is part of the image tag Compose builds, as in `rnp:main-botan3`
+and `rnp:main-openssl`, so switching backends does not overwrite the image you
+built with the other one.
 
 Ubuntu packages only Botan 2, so both Botan values compile Botan from source
 at the tag named by `BOTAN_VERSION`:

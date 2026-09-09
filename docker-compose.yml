@@ -1,5 +1,8 @@
 # Containers for RNP, the Ribose OpenPGP implementation.
 #
+# Defaults to the Botan 3 backend. Set CRYPTO_BACKEND=openssl in .env for
+# the system OpenSSL build, which compiles no Botan and is much faster.
+#
 #   docker compose run --rm rnp --version
 #   docker compose run --rm rnpkeys --list-keys
 #   docker compose run --rm dev
@@ -8,7 +11,7 @@ x-build: &build
   context: .
   args:
     RNP_VERSION: ${RNP_VERSION:-main}
-    CRYPTO_BACKEND: ${CRYPTO_BACKEND:-openssl}
+    CRYPTO_BACKEND: ${CRYPTO_BACKEND:-botan3}
     BOTAN_VERSION: ${BOTAN_VERSION:-3.13.0}
     BUILD_TYPE: ${BUILD_TYPE:-Release}
 
@@ -18,7 +21,7 @@ services:
     build:
       <<: *build
       target: runtime
-    image: rnp:${RNP_VERSION:-main}
+    image: rnp:${RNP_VERSION:-main}-${CRYPTO_BACKEND:-botan3}
     volumes:
       - keyring:/home/rnp/.rnp
       - ./data:/data
@@ -29,7 +32,7 @@ services:
     build:
       <<: *build
       target: runtime
-    image: rnp:${RNP_VERSION:-main}
+    image: rnp:${RNP_VERSION:-main}-${CRYPTO_BACKEND:-botan3}
     entrypoint: ["rnpkeys"]
     command: ["--version"]
     volumes:
@@ -43,7 +46,7 @@ services:
     build:
       <<: *build
       target: dev
-    image: rnp-dev:${RNP_VERSION:-main}
+    image: rnp-dev:${RNP_VERSION:-main}-${CRYPTO_BACKEND:-botan3}
     volumes:
       - ./src:/work
       - dev-keyring:/root/.rnp
