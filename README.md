@@ -205,6 +205,41 @@ docker compose run --rm rnp --verify message.txt.asc
 `--password` can be left out. Remove the keyring afterwards with
 `docker compose down --volumes`.
 
+## Continuous integration
+
+[.github/workflows/ci.yml](.github/workflows/ci.yml) builds and exercises every
+backend on each push and pull request, and again weekly, since RNP `main` and
+the Botan releases move on their own schedule.
+
+| Job          | What it covers                                                  |
+|--------------|-----------------------------------------------------------------|
+| `runtime`    | A matrix over the backends, each one smoke tested                |
+| `compose`    | The compose file parses, and the backend reaches the image tag    |
+| `dev-image`  | The dev target builds and carries its toolchain and source tree   |
+| `lint`       | shellcheck, plus hadolint over the Dockerfile                     |
+
+The `runtime` matrix covers OpenSSL, `botan` at 3.13.0, and `botan3` at 3.13.0,
+3.12.0 and 3.0.0. The last is the oldest Botan 3 release and marks the floor of
+what this image supports.
+
+Each matrix entry runs [scripts/smoke-test.sh](scripts/smoke-test.sh), which
+checks the backend RNP reports, generates a key, signs and verifies a file
+through a bind mount, and confirms that a tampered signature is rejected. Run
+it against any image you have built:
+
+```sh
+scripts/smoke-test.sh rnp:main-botan3 Botan 3.13.0
+```
+
+The backend name is required and the version optional. Both are compared
+against what `rnp --version` prints, so a build that silently picked the wrong
+backend fails rather than passing quietly.
+
+Builds use the GitHub Actions cache keyed on the backend and Botan version, so
+only the first run of each combination pays for compiling Botan. The matrix
+runs on x86-64 runners only; the images also build on arm64, which is where
+they were developed.
+
 ## Volumes
 
 The `rnp` and `rnpkeys` services share a `keyring` volume mounted at

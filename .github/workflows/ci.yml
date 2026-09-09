@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # RNP main and the Botan releases move independently of this repository,
+    # so rebuild weekly to catch upstream breakage rather than only on a push.
+    - cron: '0 5 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  runtime:
+    name: runtime (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The OpenSSL version comes from the base image, so it is not pinned
+          # here and the smoke test leaves it unchecked.
+          - name: openssl
+            backend: openssl
+            botan: '3.13.0'
+            expect_backend: OpenSSL
+            expect_version: ''
+
+          # Accepts either Botan major version, given a 3.x build.
+          - name: botan 3.13.0
+            backend: botan
+            botan: '3.13.0'
+            expect_backend: Botan
+            expect_version: '3.13.0'
+
+          # Requires Botan 3. Current release and the one before it, so a
+          # regression against a slightly older Botan shows up here.
+          - name: botan3 3.13.0
+            backend: botan3
+            botan: '3.13.0'
+            expect_backend: Botan
+            expect_version: '3.13.0'
+
+          - name: botan3 3.12.0
+            backend: botan3
+            botan: '3.12.0'
+            expect_backend: Botan
+            expect_version: '3.12.0'
+
+          # Oldest Botan 3 release, as the floor of what this image supports.
+          - name: botan3 3.0.0
+            backend: botan3
+            botan: '3.0.0'
+            expect_backend: Botan
+            expect_version: '3.0.0'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build runtime image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: runtime
+          load: true
+          tags: rnp:ci
+          build-args: |
+            CRYPTO_BACKEND=${{ matrix.backend }}
+            BOTAN_VERSION=${{ matrix.botan }}
+          cache-from: type=gha,scope=${{ matrix.backend }}-${{ matrix.botan }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.backend }}-${{ matrix.botan }}
+
+      - name: Smoke test
+        run: |
+          ./scripts/smoke-test.sh rnp:ci \
+            '${{ matrix.expect_backend }}' '${{ matrix.expect_version }}'
+
+  compose:
+    name: compose
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate the compose file
+        run: docker compose config >/dev/null
+
+      - name: Check the backend reaches the image tag
+        run: |
+          CRYPTO_BACKEND=openssl docker compose config \
+            | grep -q 'image: rnp:main-openssl'
+          CRYPTO_BACKEND=botan3 docker compose config \
+            | grep -q 'image: rnp:main-botan3'
+
+      # OpenSSL only, since this job exercises the compose wiring rather than
+      # the backends, and it avoids a second Botan build.
+      - name: Build and run through compose
+        run: |
+          printf 'CRYPTO_BACKEND=openssl\n' > .env
+          docker compose build rnp
+          docker compose run --rm rnp --version
+
+  dev-image:
+    name: dev image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build dev image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: dev
+          load: true
+          tags: rnp-dev:ci
+          build-args: |
+            CRYPTO_BACKEND=openssl
+          cache-from: type=gha,scope=dev-openssl
+          cache-to: type=gha,mode=max,scope=dev-openssl
+
+      - name: Check the toolchain and the source tree
+        run: |
+          docker run --rm --entrypoint bash rnp-dev:ci -c '
+            set -e
+            cmake --version | head -1
+            gdb --version | head -1
+            rnp --version | head -1
+            test -d /usr/local/src/rnp/src
+          '
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck
+        run: shellcheck scripts/smoke-test.sh
+
+      - name: Hadolint
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile

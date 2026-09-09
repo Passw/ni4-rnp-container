@@ -1,0 +1,11 @@
+# DL3008 wants every apt package pinned to a version. The base image tag
+# already pins the archive, and pinning again would break on every Ubuntu
+# point release.
+#
+# DL3006 wants a tag on every FROM. It misreads `FROM botan-${CRYPTO_BACKEND}`,
+# which selects one of this file's own build stages rather than an image.
+ignored:
+  - DL3008
+  - DL3006
+
+failure-threshold: warning

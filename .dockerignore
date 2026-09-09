@@ -5,6 +5,8 @@
 !README.md
 data/
 src/
+scripts/
+.hadolint.yaml
 build/
 .env
 .DS_Store
