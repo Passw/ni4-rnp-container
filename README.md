@@ -247,3 +247,12 @@ The `rnp` and `rnpkeys` services share a `keyring` volume mounted at
 Because `dev` runs as root, it gets a separate `dev-keyring` volume rather than
 writing root-owned files into the first one. Remove both with
 `docker compose down --volumes`.
+
+## License
+
+BSD 2-Clause, matching [RNP itself](https://github.com/rnpgp/rnp). See
+[LICENSE.md](LICENSE.md).
+
+This repository holds only the container definitions and the scripts around
+them. RNP and Botan are fetched from their own upstream sources at build time
+and are covered by their own licenses.
