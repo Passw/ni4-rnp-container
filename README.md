@@ -60,8 +60,43 @@ directly to a plain `docker build`:
 docker build --target runtime --build-arg RNP_VERSION=v0.17.1 -t rnp:v0.17.1 .
 ```
 
-Only the OpenSSL backend builds out of the box. `CRYPTO_BACKEND=botan` also
-needs Botan development packages added to the `builder` stage.
+### Crypto backend
+
+`CRYPTO_BACKEND` takes the three values RNP itself accepts:
+
+| Value     | Meaning                                            |
+|-----------|----------------------------------------------------|
+| `openssl` | System OpenSSL. Nothing extra is compiled.          |
+| `botan`   | Botan, with RNP accepting either major version.     |
+| `botan3`  | Botan, with RNP requiring version 3.                |
+
+Ubuntu packages only Botan 2, so both Botan values compile Botan from source
+at the tag named by `BOTAN_VERSION`:
+
+```sh
+docker build --target runtime \
+  --build-arg CRYPTO_BACKEND=botan3 \
+  --build-arg BOTAN_VERSION=3.13.0 \
+  -t rnp:botan3 .
+```
+
+Any tag of [randombit/botan](https://github.com/randombit/botan) works. Note
+that there is no 3.0.7: the 3.0 series ends at 3.0.0 and continues at 3.1.0,
+so the usable 3.x tags run 3.0.0, 3.1.0, 3.1.1, 3.2.0 and onward to 3.13.0.
+
+Only the shared library is built, without the command line tool, the static
+archive or the handbook. It still adds several minutes to a cold build, and
+the layer is cached afterwards, keyed on `BOTAN_VERSION`.
+
+The backend is selected by resolving a stage named `botan-$CRYPTO_BACKEND`,
+which Docker does before running anything, so a misspelled value surfaces as a
+registry error rather than a validation message:
+
+```
+ERROR: pull access denied, repository does not exist: botan-bogus
+```
+
+That means `CRYPTO_BACKEND` was not one of the three values above.
 
 ## Volumes
 

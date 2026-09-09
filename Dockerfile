@@ -5,6 +5,15 @@
 
 ARG BASE_IMAGE=ubuntu:24.04
 
+# Crypto backend passed to RNP's CMake: openssl, botan or botan3. The last
+# requires Botan 3, while botan accepts either major version. Declared here,
+# before the first stage, so it can select the Botan stage below.
+ARG CRYPTO_BACKEND=openssl
+
+# Botan release to build from source, as a tag of randombit/botan. Ubuntu
+# only packages Botan 2, so Botan 3 is compiled here.
+ARG BOTAN_VERSION=3.13.0
+
 # ---------------------------------------------------------------------------
 # base: dependencies shared by every stage
 # ---------------------------------------------------------------------------
@@ -20,6 +29,50 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libssl3t64 \
         zlib1g \
     && rm -rf /var/lib/apt/lists/*
+
+# ---------------------------------------------------------------------------
+# Botan, staged under /botan-out so later stages can copy it as a unit.
+#
+# One stage per value of CRYPTO_BACKEND. The openssl variant stages nothing,
+# which keeps the copy below unconditional while still building no Botan at
+# all when it is not wanted.
+# ---------------------------------------------------------------------------
+FROM base AS botan-source
+
+ARG BOTAN_VERSION
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        git \
+        libbz2-dev \
+        python3 \
+        zlib1g-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch "${BOTAN_VERSION}" \
+        https://github.com/randombit/botan.git /usr/local/src/botan
+
+WORKDIR /usr/local/src/botan
+
+# Only the shared library is needed: no static archive, CLI or handbook.
+RUN ./configure.py \
+        --prefix=/usr/local \
+        --build-targets=shared \
+        --with-bzip2 \
+        --with-zlib \
+        --without-documentation \
+    && make -j"$(nproc)" \
+    && make install DESTDIR=/botan-out \
+    && rm -rf /botan-out/usr/local/share
+
+FROM base AS botan-openssl
+RUN mkdir -p /botan-out/usr/local/lib /botan-out/usr/local/include
+
+FROM botan-source AS botan-botan
+FROM botan-source AS botan-botan3
+
+# Resolves to whichever of the three stages above matches CRYPTO_BACKEND.
+FROM botan-${CRYPTO_BACKEND} AS botan
 
 # ---------------------------------------------------------------------------
 # builder: toolchain plus an RNP build from source
@@ -39,10 +92,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         zlib1g-dev \
     && rm -rf /var/lib/apt/lists/*
 
+# Empty for the openssl backend.
+COPY --from=botan /botan-out/ /
+RUN ldconfig
+
 # Git ref of rnpgp/rnp to build: a tag, branch or commit.
 ARG RNP_VERSION=main
-# openssl or botan
-ARG CRYPTO_BACKEND=openssl
+ARG CRYPTO_BACKEND
 ARG BUILD_TYPE=Release
 
 WORKDIR /usr/local/src
@@ -85,6 +141,8 @@ CMD ["/bin/bash"]
 # ---------------------------------------------------------------------------
 FROM base AS runtime
 
+# The Botan shared library, or nothing for the openssl backend.
+COPY --from=botan /botan-out/usr/local/lib/ /usr/local/lib/
 COPY --from=builder /out/usr/local/ /usr/local/
 RUN ldconfig
 

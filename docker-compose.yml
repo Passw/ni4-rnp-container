@@ -9,6 +9,7 @@ x-build: &build
   args:
     RNP_VERSION: ${RNP_VERSION:-main}
     CRYPTO_BACKEND: ${CRYPTO_BACKEND:-openssl}
+    BOTAN_VERSION: ${BOTAN_VERSION:-3.13.0}
     BUILD_TYPE: ${BUILD_TYPE:-Release}
 
 services:
