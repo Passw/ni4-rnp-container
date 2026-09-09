@@ -106,6 +106,105 @@ ERROR: pull access denied, repository does not exist: botan-bogus
 
 That means `CRYPTO_BACKEND` was not one of the three values above.
 
+## Walkthrough
+
+Pin a Botan release, generate a key inside the image, then sign and verify a
+file. The commands below were run as written against Botan 3.12.0.
+
+Build the image:
+
+```sh
+docker build --target runtime \
+  --build-arg CRYPTO_BACKEND=botan3 \
+  --build-arg BOTAN_VERSION=3.12.0 \
+  -t rnp:botan-3.12.0 .
+
+docker run --rm rnp:botan-3.12.0 --version
+```
+
+```
+rnp 0.18.1+git20260909.470695b
+Ribose Inc. <rnpgp@ribose.com>
+Backend: Botan
+Backend version: 3.12.0
+```
+
+Create a volume for the keyring and a file to sign:
+
+```sh
+docker volume create rnp-demo
+mkdir -p data && echo "the quick brown fox" > data/message.txt
+```
+
+Generate a key. The passphrase is on the command line only to keep the block
+copy-pasteable. Drop `--password` and you are prompted for it instead, which
+is what you want outside a demo:
+
+```sh
+docker run --rm -v rnp-demo:/home/rnp/.rnp \
+  --entrypoint rnpkeys rnp:botan-3.12.0 \
+  --generate-key --userid "Alice <alice@example.com>" \
+  --password "demo passphrase"
+```
+
+```
+sec   3072/RSA c479a0d55d4310be 2026-09-09 [SC] [EXPIRES 2028-09-08]
+      7cd57be036fd8705c41ee5bdc479a0d55d4310be
+uid           Alice <alice@example.com>
+```
+
+Sign the file. The image entrypoint is `rnp`, so arguments go straight to it:
+
+```sh
+docker run --rm -v rnp-demo:/home/rnp/.rnp -v "$PWD/data:/data" -w /data \
+  rnp:botan-3.12.0 --clearsign message.txt --password "demo passphrase"
+```
+
+This writes `data/message.txt.asc` on the host, owned by your account.
+
+Verify it:
+
+```sh
+docker run --rm -v rnp-demo:/home/rnp/.rnp -v "$PWD/data:/data" -w /data \
+  rnp:botan-3.12.0 --verify message.txt.asc
+```
+
+```
+Good signature made Wed Sep  9 07:39:13 2026
+using RSA key c479a0d55d4310be
+uid           Alice <alice@example.com>
+Signature(s) verified successfully
+```
+
+Note that `rnp` writes these messages to standard error, so redirect with
+`2>&1` if you are piping them anywhere.
+
+Drop the demo keyring when you are done:
+
+```sh
+docker volume rm rnp-demo
+```
+
+### The same run through Compose
+
+Compose already declares the keyring volume, the `./data` mount and the
+working directory, so the commands shrink:
+
+```sh
+printf 'CRYPTO_BACKEND=botan3\nBOTAN_VERSION=3.12.0\n' > .env
+docker compose build rnp
+
+mkdir -p data && echo "the quick brown fox" > data/message.txt
+
+docker compose run --rm rnpkeys --generate-key --userid "Alice <alice@example.com>"
+docker compose run --rm rnp --clearsign message.txt
+docker compose run --rm rnp --verify message.txt.asc
+```
+
+`docker compose run` attaches a terminal, so the passphrase prompt works and
+`--password` can be left out. Remove the keyring afterwards with
+`docker compose down --volumes`.
+
 ## Volumes
 
 The `rnp` and `rnpkeys` services share a `keyring` volume mounted at
